@@ -8,7 +8,6 @@ const fs = require('fs');
 
 const SALT_ROUNDS = 10;
 
-
 // Configure multer for image upload
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -30,6 +29,7 @@ const upload = multer({
     cb(null, true);
   }
 });
+
 // Middleware to authenticate JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -76,7 +76,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { username: user.username },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+     
     );
 
     res.json({
@@ -89,7 +89,6 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 router.post('/logout', async (req, res) => {
   const { username } = req.body;
@@ -106,8 +105,6 @@ router.post('/logout', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-
 
 // Change Password Route
 router.post('/change-password', authenticateToken, async (req, res) => {
@@ -151,7 +148,6 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 // Get all clients
 router.get('/clients', authenticateToken, async (req, res) => {
@@ -218,213 +214,7 @@ router.get('/client-image/:imageFileName', async (req, res) => {
   }
 });
 
-// Modify add_client to include roles (as JSON string)
-router.post('/add_client', authenticateToken, upload.single('image'), async (req, res) => {
-  const {
-    client_name,
-    license_no,
-    issue_date,
-    expiry_date,
-    status,
-    duration,
-    plan_name,
-    customers_login,
-    sales_mgr_login,
-    superadmin_login,
-    client_address,
-    product_prefix,
-    customer_prefix,
-    sm_prefix,
-    adv_timer,
-    hsn_length,
-    roles // Add new field
-  } = req.body;
 
-  // Validate input
-  if (!client_name || !license_no || !issue_date || !duration) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const imageFileName = req.file ? req.file.filename : null;
-
-  // Store roles as a simple comma-separated string
-  let rolesString = '';
-  if (roles) {
-    if (Array.isArray(roles)) {
-      rolesString = roles.join(',');
-    } else if (typeof roles === 'string') {
-      rolesString = roles;
-    }
-  }
-
-  const values = [
-    client_name,
-    license_no,
-    issue_date,
-    expiry_date || null,
-    status || '',
-    duration,
-    plan_name || '',
-    customers_login || '',
-    sales_mgr_login || '',
-    superadmin_login || '',
-    client_address || '',
-    product_prefix || '',
-    customer_prefix || '',
-    sm_prefix || '',
-    adv_timer ? parseInt(adv_timer) : null,
-    hsn_length ? parseInt(hsn_length) : null,
-    rolesString,
-    imageFileName,
-    created_at,
-    updated_at
-  ];
-
-  try {
-    const [result] = await req.db.promise().query(
-      `INSERT INTO clients 
-        (client_name, license_no, issue_date, expiry_date, status, duration, 
-         plan_name, customers_login, sales_mgr_login, superadmin_login,
-         client_address, product_prefix, customer_prefix, sm_prefix,
-         adv_timer, hsn_length, roles, image, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
-      values
-    );
-
-    res.status(201).json({
-      message: 'Client added successfully',
-      client_id: result.insertId,
-      imageFileName: imageFileName
-    });
-  } catch (error) {
-    console.error('Add client error:', error);
-    res.status(500).json({ error: 'Failed to add client', details: error.message });
-  }
-});
-
-// Modify update_client to include roles (as JSON string)
-router.put('/update_client', authenticateToken, upload.single('image'), async (req, res) => {
-  const {
-    client_id,
-    client_name,
-    license_no,
-    issue_date,
-    expiry_date,
-    status,
-    duration,
-    plan_name,
-    customers_login,
-    sales_mgr_login,
-    superadmin_login,
-    client_address,
-    product_prefix,
-    customer_prefix,
-    sm_prefix,
-    adv_timer,
-    hsn_length,
-    roles // Add new field
-  } = req.body;
-
-  // Validate required fields
-  if (!client_id || !client_name || !license_no || !issue_date || !duration) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const imageFileName = req.file ? req.file.filename : req.body.existingImage;
-
-  // Store roles as a simple comma-separated string
-  let rolesString = '';
-  if (roles) {
-    if (Array.isArray(roles)) {
-      rolesString = roles.join(',');
-    } else if (typeof roles === 'string') {
-      rolesString = roles;
-    }
-  }
-
-  const values = [
-    client_name,
-    license_no,
-    issue_date,
-    expiry_date || null,
-    status || '',
-    duration,
-    plan_name || '',
-    customers_login || '',
-    sales_mgr_login || '',
-    superadmin_login || '',
-    client_address || '',
-    product_prefix || '',
-    customer_prefix || '',
-    sm_prefix || '',
-    adv_timer ? parseInt(adv_timer) : null,
-    hsn_length ? parseInt(hsn_length) : null,
-    rolesString,
-    imageFileName,
-    updated_at,
-    client_id
-  ];
-
-  // Fetch the old image filename BEFORE updating the database
-  let oldImage = null;
-  if (req.file) {
-    try {
-      const [rows] = await req.db.promise().query(
-        'SELECT image FROM clients WHERE client_id = ?',
-        [client_id]
-      );
-      oldImage = rows[0]?.image;
-    } catch (err) {
-      console.error('Error fetching old image before update:', err);
-    }
-  }
-
-  try {
-    const [result] = await req.db.promise().query(
-      `UPDATE clients 
-       SET client_name = ?, 
-           license_no = ?, 
-           issue_date = ?, 
-           expiry_date = ?, 
-           status = ?, 
-           duration = ?,
-           plan_name = ?,
-           customers_login = ?,
-           sales_mgr_login = ?,
-           superadmin_login = ?,
-           client_address = ?,
-           product_prefix = ?,
-           customer_prefix = ?,
-           sm_prefix = ?,
-           adv_timer = ?,
-           hsn_length = ?,
-           roles = ?,
-           image = ?,
-           updated_at = ?
-       WHERE client_id = ?`,
-      values
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-
-    // REMOVE: logic for deleting old image file and cleaning DB
-    // This logic should be handled in the upload-image API if needed
-
-    res.status(200).json({
-      message: 'Client updated successfully',
-      client_id,
-      imageFileName: imageFileName
-    });
-  } catch (error) {
-    console.error('Update client error:', error);
-    res.status(500).json({ error: 'Failed to update client', details: error.message });
-  }
-});
 
 router.get('/client_status/:client_name', async (req, res) => {
   try {
@@ -461,5 +251,317 @@ router.get('/client_status/:client_name', async (req, res) => {
     });
   }
 });
+
+
+router.post('/add_client', authenticateToken, upload.single('image'), async (req, res) => {
+  const {
+    client_name,
+    license_no,
+    issue_date,
+    expiry_date,
+    status,
+    duration,
+    plan_name,
+    customers_login,
+    sales_mgr_login,
+    superadmin_login,
+    client_address,
+    product_prefix,
+    customer_prefix,
+    sm_prefix,
+    adv_timer,
+    hsn_length,
+    roles,
+    ord_prefix,
+    inv_prefix,
+    ord_prefix_num,
+    default_due_on,
+    max_due_on
+  } = req.body;
+
+
+  if (!client_name || !license_no || !issue_date || !duration || !default_due_on || !max_due_on) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const imageFileName = req.file ? req.file.filename : null;
+
+  // Store roles as a simple comma-separated string
+  let rolesString = '';
+  if (roles) {
+    if (Array.isArray(roles)) {
+      rolesString = roles.join(',');
+    } else if (typeof roles === 'string') {
+      rolesString = roles;
+    }
+  }
+
+  const values = [
+    client_name,
+    license_no,
+    issue_date,
+    expiry_date || null,
+    status || '',
+    duration,
+    plan_name || '',
+    customers_login || '',
+    sales_mgr_login || '',
+    superadmin_login || '',
+    client_address || '',
+    product_prefix || '',
+    customer_prefix || '',
+    sm_prefix || '',
+    adv_timer ? parseInt(adv_timer) : null,
+    hsn_length ? parseInt(hsn_length) : null,
+    rolesString,
+    ord_prefix || '',
+    inv_prefix || '',
+    ord_prefix_num || '',
+    default_due_on,
+    max_due_on,
+    imageFileName,
+    created_at,
+    updated_at
+  ];
+
+  try {
+    const [result] = await req.db.promise().query(
+      `INSERT INTO clients 
+        (client_name, license_no, issue_date, expiry_date, status, duration, 
+        plan_name, customers_login, sales_mgr_login, superadmin_login,
+        client_address, product_prefix, customer_prefix, sm_prefix,
+        adv_timer, hsn_length, roles, ord_prefix, inv_prefix, ord_prefix_num,
+        default_due_on, max_due_on, image, created_at, updated_at) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      values
+    );
+
+    res.status(201).json({
+      message: 'Client added successfully',
+      client_id: result.insertId,
+      imageFileName: imageFileName
+    });
+  } catch (error) {
+    console.error('Add client error:', error);
+    res.status(500).json({ error: 'Failed to add client', details: error.message });
+  }
+});
+
+router.put('/update_client', authenticateToken, upload.single('image'), async (req, res) => {
+  // DEBUG: Log all received data
+  console.log('=== BACKEND DEBUG ===');
+  console.log('req.body:', req.body);
+  console.log('req.file:', req.file);
+  console.log('=====================');
+
+  const {
+    client_id,
+    client_name,
+    license_no,
+    issue_date,
+    expiry_date,
+    status,
+    duration,
+    plan_name,
+    customers_login,
+    sales_mgr_login,
+    superadmin_login,
+    client_address,
+    product_prefix,
+    customer_prefix,
+    sm_prefix,
+    adv_timer,
+    hsn_length,
+    roles,
+    ord_prefix,
+    inv_prefix,
+    ord_prefix_num,
+    default_due_on,
+    max_due_on
+  } = req.body;
+
+  // DEBUG: Log extracted values
+  console.log('=== EXTRACTED VALUES ===');
+  console.log('client_id:', client_id);
+  console.log('=======================');
+
+  if (!client_id || !client_name || !license_no || !issue_date || !duration || !default_due_on || !max_due_on) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const updated_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const imageFileName = req.file ? req.file.filename : (req.body.image || req.body.existingImage);
+
+  let rolesString = '';
+  if (roles) {
+    if (Array.isArray(roles)) {
+      rolesString = roles.join(',');
+    } else if (typeof roles === 'string') {
+      rolesString = roles;
+    }
+  }
+
+  const values = [
+    client_name,
+    license_no,
+    issue_date,
+    expiry_date || null,
+    status || '',
+    duration,
+    plan_name || '',
+    customers_login || '',
+    sales_mgr_login || '',
+    superadmin_login || '',
+    client_address || '',
+    product_prefix || '',
+    customer_prefix || '',
+    sm_prefix || '',
+    adv_timer ? parseInt(adv_timer) : null,
+    hsn_length ? parseInt(hsn_length) : null,
+    rolesString,
+    ord_prefix || '',
+    inv_prefix || '',
+    ord_prefix_num || '',
+    default_due_on,
+    max_due_on,
+    imageFileName,
+    updated_at,
+    client_id
+  ];
+
+  // DEBUG: Log the values array
+  console.log('=== VALUES ARRAY ===');
+  console.log('Values array length:', values.length);
+  console.log('All values:', values);
+  console.log('===================');
+
+  try {
+    const [result] = await req.db.promise().query(
+      `UPDATE clients 
+       SET client_name = ?,
+           license_no = ?,
+           issue_date = ?,
+           expiry_date = ?,
+           status = ?,
+           duration = ?,
+           plan_name = ?,
+           customers_login = ?,
+           sales_mgr_login = ?,
+           superadmin_login = ?,
+           client_address = ?,
+           product_prefix = ?,
+           customer_prefix = ?,
+           sm_prefix = ?,
+           adv_timer = ?,
+           hsn_length = ?,
+           roles = ?,
+           ord_prefix = ?,
+           inv_prefix = ?,
+           ord_prefix_num = ?,
+           default_due_on = ?,
+           max_due_on = ?,
+           image = ?,
+           updated_at = ?
+       WHERE client_id = ?`,
+      values
+    );
+
+    console.log('=== UPDATE RESULT ===');
+    console.log('Update result:', result);
+    console.log('Affected rows:', result.affectedRows);
+    console.log('====================');
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    res.status(200).json({
+      message: 'Client updated successfully',
+      client_id,
+      imageFileName: imageFileName
+    });
+  } catch (error) {
+    console.error('Update client error:', error);
+    res.status(500).json({ error: 'Failed to update client', details: error.message });
+  }
+});
+
+router.get('/app_update/:client_id', authenticateToken, async (req, res) => {
+  console.log('GET /app_update/:client_id - Request received');
+  console.log('client_id:', req.params.client_id);
+  
+  const { client_id } = req.params;
+
+  if (!client_id) {
+    return res.status(400).json({ error: 'client_id is required' });
+    
+  }
+
+  try {
+    const [result] = await req.db.promise().query(
+      'SELECT app_update, download_link FROM clients WHERE client_id = ?',
+      [client_id]
+    );
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    res.status(200).json({
+      message: 'App update value retrieved successfully',
+      client_id: parseInt(client_id),
+      app_update: result[0].app_update,
+      download_link: result[0].download_link
+    });
+  } catch (error) {
+    console.error('Get app update error:', error);
+    res.status(500).json({ error: 'Failed to get app_update', details: error.message });
+  }
+});
+
+
+
+router.post('/app_update', authenticateToken, async (req, res) => {
+  console.log('POST /app_update - Request received');
+  console.log('Request body:', req.body);
+
+  const { client_id, app_update, download_link } = req.body;
+
+  // All fields are mandatory
+  if (!client_id || !app_update || !download_link) {
+    return res.status(400).json({ 
+      error: 'client_id, app_update, and download_link are all required' 
+    });
+  }
+
+  try {
+    // Update both columns
+    const [result] = await req.db.promise().query(
+      'UPDATE clients SET app_update = ?, download_link = ? WHERE client_id = ?',
+      [app_update, download_link, client_id]
+    );
+
+    console.log('Update result:', result);
+    console.log('Affected rows:', result.affectedRows);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    // Return the updated values
+    res.status(200).json({
+      message: 'App update and download link updated successfully',
+      client_id,
+      app_update,
+      download_link
+    });
+  } catch (error) {
+    console.error('App update error:', error);
+    res.status(500).json({ error: 'Failed to update app_update', details: error.message });
+  }
+});
+
 
 module.exports = router;
